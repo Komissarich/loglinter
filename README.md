@@ -71,7 +71,7 @@ logger.Info("Very" + "сложный" + token + "log!") // want `log message sho
 При этом линтер также указывает место, где произошла ошибка, например:
 
 ```go
- analysistest.go:713: /home/komissarich/Documents/go_linter_task/testdata/russian_letters.go:13: no diagnostic was reported matching `lыog message 'старт сервера' should not use cyrillic characters`
+ analysistest.go:713: /home/komissarich/Documents/go_linter_task/testdata/russian_letters.go:13: no diagnostic was reported matching `log message 'старт сервера' should not use cyrillic characters`
 ```
 
 ## Установка и использование
