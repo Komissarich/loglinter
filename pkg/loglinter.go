@@ -28,7 +28,7 @@ func NewAnalyzer() *CustomAnalyzer {
 	return &CustomAnalyzer{
 		&analysis.Analyzer{
 			Name: "loglinter",
-			Doc: "checks that all logs uses english letters, starts with lowercasw letter, doesnt have special symbols, or emoji, doesnt have critical info",
+			Doc: "Checks that all logs uses english letters, starts with lowercase letter, doesnt have special symbols or emoji, doesnt have critical info",
 			Run: func(p *analysis.Pass) (any, error) {
 				return run(cfg, p)
 			},
