@@ -8,6 +8,5 @@ import (
 
 
 func TestLinter(t *testing.T) {
-	
-	analysistest.Run(t, analysistest.TestData(), NewAnalyzer())
+	analysistest.Run(t, analysistest.TestData(), NewAnalyzer().Analyzer)
 }

@@ -3,33 +3,45 @@ package loglinter
 import (
 	"fmt"
 	"go/ast"
+	"slices"
 	"strings"
 	"unicode"
 
+	"github.com/Komissarich/loglinter/config"
+	_ "go.uber.org/zap"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/ast/inspector"
-
-	_ "go.uber.org/zap"
 )
 
-func NewAnalyzer() *analysis.Analyzer {
-	return &analysis.Analyzer{
-		Name: "loglinter",
-		Doc: "checks that all logs uses english letters, starts with lowercasw letter, doesnt have special symbols, or emoji, doesnt have critical info",
-		Run: run,
-		Requires: []*analysis.Analyzer{inspect.Analyzer},
-	}
+type CustomAnalyzer struct {
+	Analyzer *analysis.Analyzer
+	Config *config.Config 
 }
 
-func run(pass *analysis.Pass) (interface{}, error) {
+func NewAnalyzer() *CustomAnalyzer {
+	cfg, err := config.New()
 	
-	inspector := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+	if err != nil {
+		panic("config didnt load properly")
+	}
+	return &CustomAnalyzer{
+		&analysis.Analyzer{
+			Name: "loglinter",
+			Doc: "checks that all logs uses english letters, starts with lowercasw letter, doesnt have special symbols, or emoji, doesnt have critical info",
+			Run: func(p *analysis.Pass) (any, error) {
+				return run(cfg, p)
+			},
+			Requires: []*analysis.Analyzer{inspect.Analyzer},
+	}, cfg,}
+	
+}
 
+func run(cfg *config.Config, pass *analysis.Pass) (interface{}, error) {
+	inspector := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 	nodeFilter := []ast.Node{
 		(*ast.CallExpr)(nil),
 	}
-
 	inspector.Preorder(nodeFilter, func(node ast.Node) {
 		call := node.(*ast.CallExpr)
 		selector, ok := call.Fun.(*ast.SelectorExpr)
@@ -37,7 +49,6 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			return
 		}
 		base := getBase(selector.X)
-
 		if base == nil {
 			return
 		}
@@ -45,12 +56,11 @@ func run(pass *analysis.Pass) (interface{}, error) {
 		if len(call.Args) == 0 {
         	return 
     	}
-		if checkMethod(method) {
-			checkLogMessage(pass, call)
+		if checkMethod(cfg, method) {
+			checkLogMessage(cfg, pass, call)
 		}
-		
-	})
 
+	})
 	return nil, nil
 }
 
@@ -72,53 +82,46 @@ func getBase(expr ast.Expr) *ast.Ident {
     return nil
 }
 
-func checkMethod(method string) bool {
-	switch method {
-		case "Info", "Warn", "Error", "Debug",
-			"Print", "Println", "Printf", "Fatal", "Panic", "String":
-			return true
-
-		case "With", "WithContext", "WithGroup", "Sugar", "Default":
-			return false
-
-		default:
-			return false
-    }
+func checkMethod(cfg *config.Config, method string) bool {
+	if slices.Contains(cfg.AllowedMethods, method) {
+		return true
+	}
+	return false
 }
 
-func checkLogMessage(pass *analysis.Pass, call *ast.CallExpr) {
+func checkLogMessage(cfg *config.Config, pass *analysis.Pass, call *ast.CallExpr) {
 	problems := []string{}
-	dangerous_words := []string{"password", "token", "key", "api_key", "jwt", "secret", "bearer", "private_key", "jwt_token", "auth_token", "bearer", "apiKey"}
 	for _, arg := range call.Args {
 		switch expr := arg.(type) {
 			case *ast.BinaryExpr:
-				concatWords := getConcats(expr)
-				for _, word := range concatWords {
-					lower := strings.ToLower(word.Name)
-					for _, keyword := range dangerous_words {
-						if strings.Contains(lower, keyword) {
-							problems = append(problems, fmt.Sprintf("log message should not contain critical information like %s", lower))
-							
-						} 
-				
+				if cfg.Rules.CriticalInfoCheck {
+					concatVars, concatStrings := getConcats(expr)
+					fmt.Println("concatVars", concatVars, "concatStrings", concatStrings)
+					for _, word := range concatVars {
+						lower := strings.ToLower(word.Name)
+						for _, keyword := range cfg.DangerousWords {
+							if strings.Contains(lower, keyword) {
+								problems = append(problems, fmt.Sprintf("log message should not contain critical information like %s", lower))
+							} 
+						}
 					}
 				}
 			case *ast.BasicLit:
 				message := []rune(strings.Trim(expr.Value, "\"`"))
-				if unicode.IsUpper(message[0]) {
+				if res := checkUpper(cfg, message); res != "" {
 					problems = append(problems, fmt.Sprintf("log message '%s' should be named '%s'", string(message), strings.ToLower(string(message[0])) + string(message[1:])))
 				}
-				
-				if res := useCyrillic(message); res {
+				if res := checkCyrillic(cfg, message); res != "" {
 					problems = append(problems, fmt.Sprintf("log message '%s' should not use cyrillic characters", string(message)))
 				}
-				if res := useSpecial(message); res {
-					problems = append(problems, fmt.Sprintf("log message '%s' should not use special symbols", string(message)))
+				if res := checkSpecial(cfg, message); res != "" {
+					problems = append(problems, "log message should not use special symbols")
 				}
+				
 			default:
 				continue
-		}			
-		fmt.Println(problems)
+		}
+		// fmt.Println(problems)			
 		if len(problems) != 0 {
 				pass.Report(
 				analysis.Diagnostic{
@@ -129,36 +132,52 @@ func checkLogMessage(pass *analysis.Pass, call *ast.CallExpr) {
 	}
 }
 
-func getConcats(binaryExpr ast.Expr) []*ast.Ident {
-	concatElements := []*ast.Ident{}
+func getConcats(binaryExpr ast.Expr) ([]*ast.Ident, []string) {
+	concatVariables := []*ast.Ident{}
+	concatStrings := []string{}
 	for binaryExpr != nil {
 		switch elem := binaryExpr.(type) {
 			case *ast.BinaryExpr:
 				binaryExpr = elem.X
-				concatElements = append(concatElements, elem.Y.(*ast.Ident))
-
+				concatVariables = append(concatVariables, elem.Y.(*ast.Ident))
+			case *ast.BasicLit:
+				concatStrings = append(concatStrings, elem.Value)
+				binaryExpr = nil
 			default:
+				fmt.Println("default value", binaryExpr)
 				binaryExpr = nil
 		}
 	}
-	return concatElements
-}
-
-func useCyrillic(message []rune) bool {
-	for _, r := range message {
-		if unicode.Is(unicode.Cyrillic, r) {
-			return true
-		}
-	}
-	return false
+	return concatVariables, concatStrings
 }
 
 
-func useSpecial(message []rune) bool {
-	for _, r := range message {
-		if (r != ' ') && (!((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z'))) && !unicode.Is(unicode.Cyrillic, r){
-				return true
+func checkUpper(cfg *config.Config, message []rune) string {
+	if cfg.Rules.UpperCaseCheck {
+		if unicode.IsUpper(message[0]) {
+			return fmt.Sprintf("log message '%s' should be named '%s'", string(message), strings.ToLower(string(message[0])) + string(message[1:]))
 		}
 	}
-	return false
+	return ""
+}
+
+func checkCyrillic(cfg *config.Config, message []rune) string {
+	if cfg.Rules.UpperCaseCheck {
+		for _, r := range message {
+			if unicode.Is(unicode.Cyrillic, r) {
+				return fmt.Sprintf("log message '%s' should not use cyrillic characters", string(message))
+			}
+		}
+		
+	}
+	return ""
+}
+
+func checkSpecial(cfg *config.Config, message []rune) string {
+	for _, r := range message {
+		if (r != ' ') && (!((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r<= '9'))) && !unicode.Is(unicode.Cyrillic, r){
+			return "log message should not use special symbols"
+		}
+	}
+	return ""
 }

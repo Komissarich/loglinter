@@ -1,0 +1,37 @@
+rules:
+  uppercase-check: true
+  cyrillic-check: true
+  critical-info-check: true
+  special-symbols-check: true
+
+dangerous-words:
+  - password
+  - token
+  - key
+  - apiKey
+  - api_key
+  - jwt
+  - jwt_token
+  - auth_token
+  - bearer
+  - secret
+  - private_key
+
+allowed-methods:
+  - Info
+  - Warn
+  - Error
+  - Debug
+  - Print
+  - Println
+  - Printf
+  - Fatal
+  - Panic
+  - String
+
+prevented-methods:
+  - With
+  - WithContext
+  - WithGroup
+  - Sugar
+  - Default
