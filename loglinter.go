@@ -92,43 +92,42 @@ func checkMethod(cfg *config.Config, method string) bool {
 func checkLogMessage(cfg *config.Config, pass *analysis.Pass, call *ast.CallExpr) {
 	problems := []string{}
 	for _, arg := range call.Args {
-		switch expr := arg.(type) {
-			case *ast.BinaryExpr:
-				if cfg.Rules.CriticalInfoCheck {
-					concatVars, concatStrings := getConcats(expr)
-					fmt.Println("concatVars", concatVars, "concatStrings", concatStrings)
-					for _, word := range concatVars {
-						lower := strings.ToLower(word.Name)
-						for _, keyword := range cfg.DangerousWords {
-							if strings.Contains(lower, keyword) {
-								problems = append(problems, fmt.Sprintf("log message should not contain critical information like %s", lower))
-							} 
-						}
+		expr, ok := arg.(*ast.BinaryExpr)
+		if ok {
+			if cfg.Rules.CriticalInfoCheck {
+				concatVars, concatStrings := getConcats(expr)
+				fmt.Println("concatVars", concatVars, "concatStrings", concatStrings)
+				for _, word := range concatVars {
+					lower := strings.ToLower(word.Name)
+					for _, keyword := range cfg.DangerousWords {
+						if strings.Contains(lower, keyword) {
+							problems = append(problems, fmt.Sprintf("log message should not contain critical information like %s", lower))
+						} 
 					}
 				}
-			case *ast.BasicLit:
-				message := []rune(strings.Trim(expr.Value, "\"`"))
-				if res := checkUpper(cfg, message); res != "" {
-					problems = append(problems, fmt.Sprintf("log message '%s' should be named '%s'", string(message), strings.ToLower(string(message[0])) + string(message[1:])))
+				for _, str := range concatStrings {
+					if problem := performChecks(cfg, []rune(strings.Trim(str, "\"`"))); len(problem) != 0 {
+						problems = append(problems, problem...)
+					}
 				}
-				if res := checkCyrillic(cfg, message); res != "" {
-					problems = append(problems, fmt.Sprintf("log message '%s' should not use cyrillic characters", string(message)))
-				}
-				if res := checkSpecial(cfg, message); res != "" {
-					problems = append(problems, "log message should not use special symbols")
-				}
-				
-			default:
-				continue
-		}
-		// fmt.Println(problems)			
-		if len(problems) != 0 {
-				pass.Report(
-				analysis.Diagnostic{
-					Pos:    call.Pos(),
-					Message: strings.Join(problems, ";"),
-			},)
-		}
+			}
+			break
+		} else if expr, ok := arg.(*ast.BasicLit); ok {
+			message := []rune(strings.Trim(expr.Value, "\"`"))
+			if problem := performChecks(cfg, message); len(problem) != 0 {
+				problems = append(problems, problem...)
+			}
+		}	
+	
+	}
+
+		 fmt.Println(problems)		
+	if len(problems) != 0 {
+			pass.Report(
+			analysis.Diagnostic{
+				Pos:    call.Pos(),
+				Message: strings.Join(problems, ";"),
+		},)
 	}
 }
 
@@ -139,7 +138,13 @@ func getConcats(binaryExpr ast.Expr) ([]*ast.Ident, []string) {
 		switch elem := binaryExpr.(type) {
 			case *ast.BinaryExpr:
 				binaryExpr = elem.X
-				concatVariables = append(concatVariables, elem.Y.(*ast.Ident))
+				ident, ok := elem.Y.(*ast.Ident)
+				if ok {
+					concatVariables = append(concatVariables, ident)
+				} else {
+					concatStrings = append(concatStrings, elem.Y.(*ast.BasicLit).Value)
+				}
+				
 			case *ast.BasicLit:
 				concatStrings = append(concatStrings, elem.Value)
 				binaryExpr = nil
@@ -151,6 +156,21 @@ func getConcats(binaryExpr ast.Expr) ([]*ast.Ident, []string) {
 	return concatVariables, concatStrings
 }
 
+func performChecks(cfg *config.Config, message []rune) []string {
+	fmt.Println("received string: ", string(message))
+	result := []string{}
+	if res := checkUpper(cfg, message); res != "" {
+		result = append(result, fmt.Sprintf("log message '%s' should be named '%s'", string(message), strings.ToLower(string(message[0])) + string(message[1:])))
+	}
+	if res := checkCyrillic(cfg, message); res != "" {
+		result = append(result,fmt.Sprintf("log message '%s' should not use cyrillic characters", string(message)))
+	}
+	if res := checkSpecial(cfg, message); res != "" {
+		result = append(result,"log message should not use special symbols")
+	}
+	fmt.Println("found problems:", result)
+	return result
+}
 
 func checkUpper(cfg *config.Config, message []rune) string {
 	if cfg.Rules.UpperCaseCheck {
@@ -168,14 +188,13 @@ func checkCyrillic(cfg *config.Config, message []rune) string {
 				return fmt.Sprintf("log message '%s' should not use cyrillic characters", string(message))
 			}
 		}
-		
 	}
 	return ""
 }
 
 func checkSpecial(cfg *config.Config, message []rune) string {
 	for _, r := range message {
-		if (r != ' ') && (!((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r<= '9'))) && !unicode.Is(unicode.Cyrillic, r){
+		if (r != ' ') && (!((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r<= '9'))) && (!unicode.Is(unicode.Cyrillic, r)){
 			return "log message should not use special symbols"
 		}
 	}
