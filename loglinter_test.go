@@ -1,4 +1,4 @@
-package linter
+package loglinter
 
 import (
 	"testing"

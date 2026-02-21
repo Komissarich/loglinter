@@ -1,4 +1,4 @@
-package linter
+package loglinter
 
 import (
 	"fmt"
@@ -28,9 +28,7 @@ func NewAnalyzer() *analysis.Analyzer {
 			},
 			Requires: []*analysis.Analyzer{inspect.Analyzer},
 	}
-	
 }
-
 func run(cfg *config.Config, pass *analysis.Pass) (interface{}, error) {
 	inspector := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 	nodeFilter := []ast.Node{
