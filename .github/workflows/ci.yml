@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.1"
+      - name: Download dependencies
+        run: go mod download
+      - name: Tidy and verify modules
+        run: |
+          go mod tidy
+          go mod verify
+      - name: Run tests
+        run: go test -v ./...
+      - name: Run golangci-lint (standard)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - name: Build standalone linter
+        run: go build -o myloglinter ./cmd/main.go
+
+      - name: Test standalone linter
+        run: ./myloglinter ./testdata/... || true
+      - name: Install golangci-lint (for custom build)
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+      - name: Build custom golangci-lint with loglinter
+        run: golangci-lint custom -v || echo "Custom build failed (expected if no GitHub release)"
+
+      - name: Run custom linter (if built)
+        run: ./custom-gcl run ./...

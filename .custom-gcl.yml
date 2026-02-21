@@ -1,8 +1,7 @@
-version: v1.64.8
+version: v2.10.1
 plugins:
   - module: "github.com/Komissarich/loglinter"
     path: .
-    import: github.com/Komissarich/loglinter/pkg/golinters
     analyzers:
       - name: loglinter
         description: "Checks that all logs uses english letters, starts with lowercase letter, doesnt have special symbols or emoji, doesnt have critical info"
