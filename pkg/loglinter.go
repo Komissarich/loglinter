@@ -14,26 +14,21 @@ import (
 	"golang.org/x/tools/go/ast/inspector"
 )
 
-type CustomAnalyzer struct {
-	Analyzer *analysis.Analyzer
-	Config *config.Config 
-}
 
-func NewAnalyzer() *CustomAnalyzer {
+func NewAnalyzer() *analysis.Analyzer {
 	cfg, err := config.New()
 	
 	if err != nil {
 		panic("config didnt load properly")
 	}
-	return &CustomAnalyzer{
-		&analysis.Analyzer{
+	return &analysis.Analyzer{
 			Name: "loglinter",
 			Doc: "Checks that all logs uses english letters, starts with lowercase letter, doesnt have special symbols or emoji, doesnt have critical info",
 			Run: func(p *analysis.Pass) (any, error) {
 				return run(cfg, p)
 			},
 			Requires: []*analysis.Analyzer{inspect.Analyzer},
-	}, cfg,}
+	}
 	
 }
 

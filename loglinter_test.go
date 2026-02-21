@@ -9,5 +9,5 @@ import (
 
 
 func TestLinter(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), loglinter.NewAnalyzer().Analyzer)
+	analysistest.Run(t, analysistest.TestData(), loglinter.NewAnalyzer())
 }
