@@ -9,6 +9,8 @@ import (
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/ast/inspector"
+
+	_ "go.uber.org/zap"
 )
 
 func NewAnalyzer() *analysis.Analyzer {
@@ -73,7 +75,7 @@ func getBase(expr ast.Expr) *ast.Ident {
 func checkMethod(method string) bool {
 	switch method {
 		case "Info", "Warn", "Error", "Debug",
-			"Print", "Println", "Printf", "Fatal", "Panic":
+			"Print", "Println", "Printf", "Fatal", "Panic", "String":
 			return true
 
 		case "With", "WithContext", "WithGroup", "Sugar", "Default":
@@ -85,47 +87,44 @@ func checkMethod(method string) bool {
 }
 
 func checkLogMessage(pass *analysis.Pass, call *ast.CallExpr) {
+	problems := []string{}
 	dangerous_words := []string{"password", "token", "key", "api_key", "jwt", "secret", "bearer", "private_key", "jwt_token", "auth_token", "bearer", "apiKey"}
 	for _, arg := range call.Args {
-		fmt.Println(arg)
-		dangerous_concat, ok := arg.(*ast.BinaryExpr)
-		if !ok {
-			fmt.Println("helloas")
-			logMessage, ok := arg.(*ast.BasicLit)
-			if !ok {
+		switch expr := arg.(type) {
+			case *ast.BinaryExpr:
+				concatWords := getConcats(expr)
+				for _, word := range concatWords {
+					lower := strings.ToLower(word.Name)
+					for _, keyword := range dangerous_words {
+						if strings.Contains(lower, keyword) {
+							problems = append(problems, fmt.Sprintf("log message should not contain critical information like %s", lower))
+							
+						} 
+				
+					}
+				}
+			case *ast.BasicLit:
+				message := []rune(strings.Trim(expr.Value, "\"`"))
+				if unicode.IsUpper(message[0]) {
+					problems = append(problems, fmt.Sprintf("log message '%s' should be named '%s'", string(message), strings.ToLower(string(message[0])) + string(message[1:])))
+				}
+				
+				if res := useCyrillic(message); res {
+					problems = append(problems, fmt.Sprintf("log message '%s' should not use cyrillic characters", string(message)))
+				}
+				if res := useSpecial(message); res {
+					problems = append(problems, fmt.Sprintf("log message '%s' should not use special symbols", string(message)))
+				}
+			default:
 				continue
-			}
-			message := []rune(strings.Trim(logMessage.Value, "\"`"))
-			if unicode.IsUpper(message[0]) {
-				pass.Reportf(call.Pos(), "log message '%s' should be named '%s'",
-				string(message), strings.ToLower(string(message[0])) + string(message[1:]))
-			}
-			for _, r := range message {
-				if !unicode.Is(unicode.Latin, r) {
-					if unicode.Is(unicode.Cyrillic, r) {
-						pass.Reportf(call.Pos(), "log message '%s' should not use cyrillic characters",
-						string(message))
-					}
-					if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')) {
-						pass.Reportf(call.Pos(), "log message '%s' should not use special symbols",
-						string(message))
-					}
-				}
-			}
-			continue
-		} 
-
-		concatWords := getConcats(dangerous_concat)
-		for _, word := range concatWords {
-			lower := strings.ToLower(word.Name)
-			for _, keyword := range dangerous_words {
-				if strings.Contains(lower, keyword) {
-					pass.Reportf(call.Pos(), "log message should not use contain critical information like %s", lower)
-				} else {
-					continue
-				}
-			fmt.Println("again")
-			}
+		}			
+		fmt.Println(problems)
+		if len(problems) != 0 {
+				pass.Report(
+				analysis.Diagnostic{
+					Pos:    call.Pos(),
+					Message: strings.Join(problems, ";"),
+			},)
 		}
 	}
 }
@@ -143,4 +142,23 @@ func getConcats(binaryExpr ast.Expr) []*ast.Ident {
 		}
 	}
 	return concatElements
+}
+
+func useCyrillic(message []rune) bool {
+	for _, r := range message {
+		if unicode.Is(unicode.Cyrillic, r) {
+			return true
+		}
+	}
+	return false
+}
+
+
+func useSpecial(message []rune) bool {
+	for _, r := range message {
+		if (r != ' ') && (!((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z'))) && !unicode.Is(unicode.Cyrillic, r){
+				return true
+		}
+	}
+	return false
 }
