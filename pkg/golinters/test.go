@@ -1,7 +1,16 @@
 package golinters
 
-import "github.com/golangci/golangci-lint/pkg/goanalysis"
+import (
+	"github.com/Komissarich/loglinter"
+	"github.com/golangci/golangci-lint/pkg/goanalysis"
+	"golang.org/x/tools/go/analysis"
+)
 
-func NewTestlinter() *goanalysis.Linter {
-	return goanalysis.NewLinter("testlinter", "Test", nil, nil)
+func NewLoglinter() *goanalysis.Linter {  // ← маленькая l после Log
+    return goanalysis.NewLinter(
+        "loglinter",
+        "Проверяет логи на английский, отсутствие кириллицы, эмодзи, критических данных",
+        []*analysis.Analyzer{loglinter.NewAnalyzer()},
+        nil,
+    ).WithLoadMode(goanalysis.LoadModeSyntax)
 }
