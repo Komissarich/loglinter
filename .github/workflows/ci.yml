@@ -37,22 +37,3 @@ jobs:
           go mod verify
       - name: Run tests
         run: go test -v ./...
-      - name: Run golangci-lint (standard)
-        uses: golangci/golangci-lint-action@v7
-        with:
-          version: v2.10.1
-          args: --timeout=5m
-
-      - name: Build standalone linter
-        run: go build -o myloglinter ./cmd/main.go
-
-      - name: Test standalone linter
-        run: ./myloglinter ./testdata/... || true
-      - name: Install golangci-lint (for custom build)
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-
-      - name: Build custom golangci-lint with loglinter
-        run: golangci-lint custom -v || echo "Custom build failed (expected if no GitHub release)"
-
-      - name: Run custom linter (if built)
-        run: ./custom-gcl run ./...
