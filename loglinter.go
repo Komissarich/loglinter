@@ -43,13 +43,8 @@ func run(pass *analysis.Pass) (interface{}, error) {
 		if len(call.Args) == 0 {
         	return 
     	}
-
-		// fmt.Println("args: ", call.Args[0].(*ast.BinaryExpr).X.(*ast.Ident).Name)
-	
-		// fmt.Println(base.Name, method, cleanLogMessage)
-
 		if checkMethod(method) {
-			 checkLogMessage(pass, call)
+			checkLogMessage(pass, call)
 		}
 		
 	})
@@ -60,17 +55,17 @@ func run(pass *analysis.Pass) (interface{}, error) {
 func getBase(expr ast.Expr) *ast.Ident {
     for expr != nil {
         switch e := expr.(type) {
-        case *ast.Ident:
-            return e
-        case *ast.SelectorExpr:
-            expr = e.X
-        case *ast.CallExpr:
-            expr = e.Fun
-        case *ast.ParenExpr:
-            expr = e.X
-        default:
-            return nil
-        }
+			case *ast.Ident:
+				return e
+			case *ast.SelectorExpr:
+				expr = e.X
+			case *ast.CallExpr:
+				expr = e.Fun
+			case *ast.ParenExpr:
+				expr = e.X
+			default:
+				return nil
+			}
     }
     return nil
 }
@@ -90,7 +85,7 @@ func checkMethod(method string) bool {
 }
 
 func checkLogMessage(pass *analysis.Pass, call *ast.CallExpr) {
-	dangerous_words := []string{"password", "token", "key", "api_key", "jwt", "secret", "bearer", "private_key", "jwt_token", "auth_token", "bearer"}
+	dangerous_words := []string{"password", "token", "key", "api_key", "jwt", "secret", "bearer", "private_key", "jwt_token", "auth_token", "bearer", "apiKey"}
 	for _, arg := range call.Args {
 		fmt.Println(arg)
 		dangerous_concat, ok := arg.(*ast.BinaryExpr)
@@ -119,23 +114,33 @@ func checkLogMessage(pass *analysis.Pass, call *ast.CallExpr) {
 			}
 			continue
 		} 
-		dangerous_var, ok := dangerous_concat.Y.(*ast.Ident)
-		if !ok {
-			dangerous_var, ok = dangerous_concat.X.(*ast.Ident)
-			if !ok {
-				continue
+
+		concatWords := getConcats(dangerous_concat)
+		for _, word := range concatWords {
+			lower := strings.ToLower(word.Name)
+			for _, keyword := range dangerous_words {
+				if strings.Contains(lower, keyword) {
+					pass.Reportf(call.Pos(), "log message should not use contain critical information like %s", lower)
+				} else {
+					continue
+				}
+			fmt.Println("again")
 			}
 		}
-		lower := strings.ToLower(dangerous_var.Name)
-		for _, keyword := range dangerous_words {
-			if strings.Contains(lower, keyword) {
-				pass.Reportf(call.Pos(), "log message should not use contain critical information like %s", lower)
-			} else {
-				continue
-			}
+	}
+}
 
-		fmt.Println("again")
+func getConcats(binaryExpr ast.Expr) []*ast.Ident {
+	concatElements := []*ast.Ident{}
+	for binaryExpr != nil {
+		switch elem := binaryExpr.(type) {
+			case *ast.BinaryExpr:
+				binaryExpr = elem.X
+				concatElements = append(concatElements, elem.Y.(*ast.Ident))
+
+			default:
+				binaryExpr = nil
+		}
 	}
-	
-	}
+	return concatElements
 }
