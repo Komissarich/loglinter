@@ -88,7 +88,6 @@ func checkLogMessage(cfg *config.Config, pass *analysis.Pass, call *ast.CallExpr
 		if ok {
 			if cfg.Rules.CriticalInfoCheck {
 				concatVars, concatStrings := getConcats(expr)
-				fmt.Println("concatVars", concatVars, "concatStrings", concatStrings)
 				for _, word := range concatVars {
 					lower := strings.ToLower(word.Name)
 					for _, keyword := range cfg.DangerousWords {
@@ -113,7 +112,6 @@ func checkLogMessage(cfg *config.Config, pass *analysis.Pass, call *ast.CallExpr
 	
 	}
 
-		 fmt.Println(problems)		
 	if len(problems) != 0 {
 			pass.Report(
 			analysis.Diagnostic{
@@ -141,7 +139,6 @@ func getConcats(binaryExpr ast.Expr) ([]*ast.Ident, []string) {
 				concatStrings = append(concatStrings, elem.Value)
 				binaryExpr = nil
 			default:
-				fmt.Println("default value", binaryExpr)
 				binaryExpr = nil
 		}
 	}
@@ -149,7 +146,6 @@ func getConcats(binaryExpr ast.Expr) ([]*ast.Ident, []string) {
 }
 
 func performChecks(cfg *config.Config, message []rune) []string {
-	fmt.Println("received string: ", string(message))
 	result := []string{}
 	if res := checkUpper(cfg, message); res != "" {
 		result = append(result, fmt.Sprintf("log message '%s' should be named '%s'", string(message), strings.ToLower(string(message[0])) + string(message[1:])))
@@ -160,7 +156,6 @@ func performChecks(cfg *config.Config, message []rune) []string {
 	if res := checkSpecial(cfg, message); res != "" {
 		result = append(result,"log message should not use special symbols")
 	}
-	fmt.Println("found problems:", result)
 	return result
 }
 
