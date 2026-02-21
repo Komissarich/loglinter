@@ -86,10 +86,11 @@ logger.Info("Very" + "сложный" + token + "log!") // want `log message sho
 2. Собрать бинарник
    ```bash
    go build -o loglinter ./cmd/main.go
+   cd ..
    ```
 3. Запустить на своем проекте
    ```bash
-   ./loglinter ./...
+   ./loglinter/loglinter ./...
    ```
 
 К большому сожалению, у меня не получилось интегрировать его в golangci-lint, я убил на это почти целый день и у меня так ничего и не вышло.
