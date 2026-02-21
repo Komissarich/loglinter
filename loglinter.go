@@ -17,7 +17,6 @@ import (
 
 func NewAnalyzer() *analysis.Analyzer {
 	cfg, err := config.New()
-	
 	if err != nil {
 		panic("config didnt load properly")
 	}

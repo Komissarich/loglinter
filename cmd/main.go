@@ -1,7 +1,7 @@
 package main
 
 import (
-	loglinter "github.com/Komissarich/loglinter/pkg"
+	"github.com/Komissarich/loglinter"
 	"golang.org/x/tools/go/analysis/singlechecker"
 )
 
